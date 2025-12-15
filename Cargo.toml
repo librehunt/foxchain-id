@@ -11,6 +11,9 @@ documentation = "https://docs.rs/foxchain-id"
 keywords = ["blockchain", "address", "identification", "crypto", "multi-chain"]
 categories = ["cryptography", "web-programming"]
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 hex = "0.4"
 tiny-keccak = { version = "2.0", features = ["keccak"] }
@@ -19,9 +22,17 @@ bech32 = "0.9"
 sha2 = "0.10"
 ss58-registry = "1.51"
 blake2 = "0.10"
-secp256k1 = "0.28"
 ed25519-dalek = "2.1"
 ripemd = "0.1"
 sha3 = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+secp256k1 = "0.28"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+k256 = "0.13"
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+getrandom = { version = "0.2", features = ["js"] }

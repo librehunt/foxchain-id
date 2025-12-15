@@ -1,7 +1,6 @@
 //! secp256k1 cryptographic utilities
 
 use crate::Error;
-use secp256k1::PublicKey;
 
 /// Decompress a compressed secp256k1 public key
 ///
@@ -33,14 +32,34 @@ pub fn decompress_public_key(compressed_key: &[u8]) -> Result<Vec<u8>, Error> {
         )));
     }
 
-    // Parse the compressed public key
-    let public_key = PublicKey::from_slice(compressed_key)
-        .map_err(|e| Error::InvalidInput(format!("Invalid compressed public key: {}", e)))?;
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use secp256k1::PublicKey;
+        // Parse the compressed public key
+        let public_key = PublicKey::from_slice(compressed_key)
+            .map_err(|e| Error::InvalidInput(format!("Invalid compressed public key: {}", e)))?;
 
-    // Serialize to uncompressed format (65 bytes: 0x04 + 64 bytes)
-    let uncompressed = public_key.serialize_uncompressed();
+        // Serialize to uncompressed format (65 bytes: 0x04 + 64 bytes)
+        let uncompressed = public_key.serialize_uncompressed();
 
-    Ok(uncompressed.to_vec())
+        Ok(uncompressed.to_vec())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        use k256::elliptic_curve::sec1::ToEncodedPoint;
+        use k256::PublicKey;
+
+        // Parse the compressed public key using k256
+        let public_key = PublicKey::from_sec1_bytes(compressed_key)
+            .map_err(|e| Error::InvalidInput(format!("Invalid compressed public key: {}", e)))?;
+
+        // Serialize to uncompressed format (65 bytes: 0x04 + 64 bytes)
+        let encoded_point = public_key.to_encoded_point(false); // false = uncompressed
+        let uncompressed = encoded_point.as_bytes();
+
+        Ok(uncompressed.to_vec())
+    }
 }
 
 #[cfg(test)]

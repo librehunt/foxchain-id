@@ -12,6 +12,9 @@ mod pipelines;
 mod registry;
 mod shared;
 
+#[cfg(target_arch = "wasm32")]
+mod wasm;
+
 pub use identify::{identify as identify_all, IdentificationCandidate, InputType};
 
 /// Identify the blockchain(s) for a given input string.
