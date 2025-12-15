@@ -15,6 +15,7 @@ Multi-chain blockchain address identification library for Rust.
 - **EIP-55 checksum validation**: Validate and normalize EVM addresses according to EIP-55
 - **Public key detection**: Detect public keys in various formats (hex, base58, bech32)
 - **Address derivation**: Derive addresses from public keys for supported chains
+- **WebAssembly support**: Compile to WASM for use in web browsers and Node.js (see [WASM.md](WASM.md))
 
 ## Quick Start
 
@@ -141,6 +142,7 @@ let best_match = result.iter()
 
 - [Format Documentation](docs/) - Detailed documentation for each address format
 - [API Documentation](https://docs.rs/foxchain-id) - Full API reference (when published)
+- [WASM Documentation](WASM.md) - WebAssembly build and usage guide
 
 ## Contributing
 

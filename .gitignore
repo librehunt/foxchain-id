@@ -4,3 +4,12 @@
 .cursor/
 scripts
 codeanalysis
+
+# WASM build outputs
+/pkg
+/pkg-node
+/pkg-bundler
+/pkg-web
+examples/pkg
+examples/pkg-node
+examples/pkg-bundler
