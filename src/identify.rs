@@ -33,6 +33,8 @@ pub struct IdentificationCandidate {
     pub confidence: f64,
     /// Reasoning for this candidate
     pub reasoning: String,
+    /// Scanner URL for viewing this address on a block explorer (optional)
+    pub scanner_url: Option<String>,
 }
 
 /// Type of input being identified
@@ -100,6 +102,32 @@ pub fn identify(input: &str) -> Result<Vec<IdentificationCandidate>, Error> {
     }
 }
 
+/// Generate scanner URL for a chain and address
+fn generate_scanner_url(
+    chain_id: &str,
+    normalized_address: &str,
+    registry: &Registry,
+) -> Option<String> {
+    // First, try to get chain-specific scanner URL from metadata
+    if let Some(chain_metadata) = registry.chains.iter().find(|c| c.id == chain_id) {
+        if let Some(template) = &chain_metadata.scanner_url_template {
+            return Some(template.replace("{address}", normalized_address));
+        }
+
+        // Fallback: if it's an EVM chain without a specific scanner, use routescan.io
+        if let Some(chain_config) = registry.get_chain_config(chain_id) {
+            if chain_config.address_pipeline == "evm" {
+                return Some(format!(
+                    "https://routescan.io/{}/address/{}",
+                    chain_id, normalized_address
+                ));
+            }
+        }
+    }
+
+    None
+}
+
 /// Try address detection for a specific chain (after metadata matching)
 fn try_address_detection_for_chain(
     input: &str,
@@ -123,13 +151,17 @@ fn try_address_detection_for_chain(
                 .ok()
                 .flatten()
         })
-        .map(|result| IdentificationCandidate {
-            input_type: InputType::Address,
-            chain: result.chain,
-            encoding: result.encoding,
-            normalized: result.normalized,
-            confidence: result.confidence,
-            reasoning: result.reasoning,
+        .map(|result| {
+            let scanner_url = generate_scanner_url(&result.chain, &result.normalized, registry);
+            IdentificationCandidate {
+                input_type: InputType::Address,
+                chain: result.chain,
+                encoding: result.encoding,
+                normalized: result.normalized,
+                confidence: result.confidence,
+                reasoning: result.reasoning,
+                scanner_url,
+            }
         })
         .collect()
 }
@@ -185,6 +217,7 @@ fn try_public_key_derivation_for_chain(
                     crate::input::DetectedKeyType::Sr25519 => PublicKeyType::Sr25519,
                 };
 
+                let scanner_url = generate_scanner_url(chain_id, &derived_address, registry);
                 vec![IdentificationCandidate {
                     input_type: InputType::PublicKey,
                     chain: chain_id.to_string(),
@@ -196,6 +229,7 @@ fn try_public_key_derivation_for_chain(
                         curve_name(curve),
                         chain_config.address_pipeline
                     ),
+                    scanner_url,
                 }]
             } else {
                 Vec::new()

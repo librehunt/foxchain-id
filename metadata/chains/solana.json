@@ -1,6 +1,7 @@
 {
   "id": "solana",
   "name": "Solana",
+  "scanner_url_template": "https://solscan.io/account/{address}",
   "curve": "ed25519",
   "address_pipeline": "solana",
   "requires_stake_key": false,

@@ -1,6 +1,7 @@
 {
   "id": "osmosis",
   "name": "Osmosis",
+  "scanner_url_template": "https://www.mintscan.io/osmosis/account/{address}",
   "curve": "ed25519",
   "address_pipeline": "cosmos",
   "requires_stake_key": false,

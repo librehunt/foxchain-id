@@ -1,6 +1,7 @@
 {
   "id": "base",
   "name": "Base",
+  "scanner_url_template": "https://routescan.io/base/address/{address}",
   "curve": "secp256k1",
   "address_pipeline": "evm",
   "requires_stake_key": false,

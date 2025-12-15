@@ -5,6 +5,8 @@ use serde_json::Value;
 pub struct ChainConfig {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub scanner_url_template: Option<String>,
     pub curve: String,
     pub address_pipeline: String,
     #[serde(default)]

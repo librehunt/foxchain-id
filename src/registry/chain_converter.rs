@@ -229,6 +229,7 @@ pub fn convert_chain_config(config: ChainConfig) -> Result<ChainMetadata, String
     Ok(ChainMetadata {
         id: config.id.clone(),
         name: config.name,
+        scanner_url_template: config.scanner_url_template,
         address_formats,
         public_key_formats,
     })

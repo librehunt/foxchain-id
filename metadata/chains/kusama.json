@@ -1,6 +1,7 @@
 {
   "id": "kusama",
   "name": "Kusama",
+  "scanner_url_template": "https://polkascan.io/kusama/account/{address}",
   "curve": "ed25519",
   "address_pipeline": "ss58",
   "requires_stake_key": false,

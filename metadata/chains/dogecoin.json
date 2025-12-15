@@ -1,6 +1,7 @@
 {
   "id": "dogecoin",
   "name": "Dogecoin",
+  "scanner_url_template": "https://blockchair.com/dogecoin/address/{address}",
   "curve": "secp256k1",
   "address_pipeline": "bitcoin_p2pkh",
   "requires_stake_key": false,
