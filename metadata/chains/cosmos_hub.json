@@ -1,6 +1,7 @@
 {
   "id": "cosmos_hub",
   "name": "Cosmos Hub",
+  "scanner_url_template": "https://www.mintscan.io/cosmos/account/{address}",
   "curve": "ed25519",
   "address_pipeline": "cosmos",
   "requires_stake_key": false,

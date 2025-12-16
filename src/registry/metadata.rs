@@ -11,6 +11,8 @@ pub struct ChainMetadata {
     pub id: String,
     /// Human-readable chain name
     pub name: String,
+    /// Scanner URL template with {address} placeholder (optional)
+    pub scanner_url_template: Option<String>,
     /// All supported address formats for this chain
     pub address_formats: Vec<AddressMetadata>,
     /// All supported public key formats for this chain

@@ -1,6 +1,7 @@
 {
   "id": "terra",
   "name": "Terra",
+  "scanner_url_template": "https://finder.terra.money/mainnet/address/{address}",
   "curve": "ed25519",
   "address_pipeline": "cosmos",
   "requires_stake_key": false,

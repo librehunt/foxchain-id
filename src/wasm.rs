@@ -25,6 +25,8 @@ pub struct WasmIdentificationCandidate {
     pub confidence: f64,
     /// Reasoning for this candidate
     pub reasoning: String,
+    /// Scanner URL for viewing this address on a block explorer (optional)
+    pub scanner_url: Option<String>,
 }
 
 /// Convert EncodingType enum to string representation
@@ -56,6 +58,7 @@ fn candidate_to_wasm(candidate: IdentificationCandidate) -> WasmIdentificationCa
         normalized: candidate.normalized,
         confidence: candidate.confidence,
         reasoning: candidate.reasoning,
+        scanner_url: candidate.scanner_url,
     }
 }
 

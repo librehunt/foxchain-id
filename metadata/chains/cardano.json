@@ -1,6 +1,7 @@
 {
   "id": "cardano",
   "name": "Cardano",
+  "scanner_url_template": "https://cardanoscan.io/address/{address}",
   "curve": "ed25519",
   "address_pipeline": "cardano",
   "requires_stake_key": true,

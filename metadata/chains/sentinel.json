@@ -1,6 +1,7 @@
 {
   "id": "sentinel",
   "name": "Sentinel",
+  "scanner_url_template": "https://www.mintscan.io/sentinel/account/{address}",
   "curve": "ed25519",
   "address_pipeline": "cosmos",
   "requires_stake_key": false,

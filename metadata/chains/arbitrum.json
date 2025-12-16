@@ -1,6 +1,7 @@
 {
   "id": "arbitrum",
   "name": "Arbitrum",
+  "scanner_url_template": "https://routescan.io/arbitrum/address/{address}",
   "curve": "secp256k1",
   "address_pipeline": "evm",
   "requires_stake_key": false,
