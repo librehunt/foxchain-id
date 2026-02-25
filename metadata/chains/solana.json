@@ -2,6 +2,7 @@
   "id": "solana",
   "name": "Solana",
   "scanner_url_template": "https://solscan.io/account/{address}",
+  "transaction_scanner_url_template": "https://solscan.io/tx/{transaction}",
   "curve": "ed25519",
   "address_pipeline": "solana",
   "requires_stake_key": false,

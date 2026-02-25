@@ -7,6 +7,9 @@ pub struct ChainConfig {
     pub name: String,
     #[serde(default)]
     pub scanner_url_template: Option<String>,
+    /// Scanner URL template for transactions with {transaction} placeholder (optional)
+    #[serde(default)]
+    pub transaction_scanner_url_template: Option<String>,
     pub curve: String,
     pub address_pipeline: String,
     #[serde(default)]

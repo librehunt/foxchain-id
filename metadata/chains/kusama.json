@@ -2,6 +2,7 @@
   "id": "kusama",
   "name": "Kusama",
   "scanner_url_template": "https://polkascan.io/kusama/account/{address}",
+  "transaction_scanner_url_template": "https://kusama.subscan.io/extrinsic/{transaction}",
   "curve": "ed25519",
   "address_pipeline": "ss58",
   "requires_stake_key": false,
@@ -10,7 +11,7 @@
   },
   "public_key_formats": [{
     "encoding": "hex",
-    "exact_length": 64,
+    "exact_length": 66,
     "prefixes": ["0x"]
   }]
 }

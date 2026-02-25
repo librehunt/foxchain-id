@@ -2,6 +2,7 @@
   "id": "cardano",
   "name": "Cardano",
   "scanner_url_template": "https://cardanoscan.io/address/{address}",
+  "transaction_scanner_url_template": "https://cardanoscan.io/transaction/{transaction}",
   "curve": "ed25519",
   "address_pipeline": "cardano",
   "requires_stake_key": true,

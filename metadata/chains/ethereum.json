@@ -2,13 +2,14 @@
   "id": "ethereum",
   "name": "Ethereum",
   "scanner_url_template": "https://etherscan.io/address/{address}",
+  "transaction_scanner_url_template": "https://etherscan.io/tx/{transaction}",
   "curve": "secp256k1",
   "address_pipeline": "evm",
   "requires_stake_key": false,
   "address_params": {},
   "public_key_formats": [{
     "encoding": "hex",
-    "length_range": [66, 130],
+    "length_range": [66, 132],
     "prefixes": ["0x"]
   }]
 }
