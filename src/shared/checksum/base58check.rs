@@ -102,7 +102,7 @@ mod tests {
         let version = 0x00u8;
         let address_bytes = vec![0u8; 20];
         let payload = [&[version], address_bytes.as_slice()].concat();
-        let mut wrong_checksum = vec![0xFFu8; 4]; // Wrong checksum
+        let wrong_checksum = vec![0xFFu8; 4]; // Wrong checksum
         let full_bytes = [payload, wrong_checksum].concat();
         let invalid_addr = full_bytes.to_base58();
 
@@ -115,7 +115,7 @@ mod tests {
     fn test_validate_wrong_length_decoded() {
         // Create Base58 string that decodes to wrong length
         use base58::ToBase58;
-        let short_bytes = vec![0u8; 20]; // 20 bytes, not 25
+        let short_bytes = [0u8; 20]; // 20 bytes, not 25
         let base58_short = short_bytes.to_base58();
 
         let result = validate(&base58_short);

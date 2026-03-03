@@ -406,8 +406,7 @@ mod tests {
         let result = identify(input);
 
         // Verify the full pipeline works
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
             // Should return multiple EVM chains
             assert!(candidates.iter().any(|c| c.chain == "ethereum"));
@@ -421,9 +420,6 @@ mod tests {
             assert_ne!(candidates[0].normalized, input);
             assert!(candidates[0].normalized.starts_with("0x"));
             assert_eq!(candidates[0].normalized.len(), 42);
-        } else {
-            // If it fails, verify error structure
-            assert!(result.is_err());
         }
     }
 
@@ -434,11 +430,8 @@ mod tests {
         let result = identify(input);
 
         // Verify the full pipeline works
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
-            // Should have multiple EVM chains
-            assert!(candidates.len() >= 1);
             // All should be EVM chains
             let evm_chains = [
                 "ethereum",
@@ -459,9 +452,6 @@ mod tests {
             for i in 1..candidates.len() {
                 assert!(candidates[i - 1].confidence >= candidates[i].confidence);
             }
-        } else {
-            // If it fails, verify error structure
-            assert!(result.is_err());
         }
     }
 
@@ -483,8 +473,7 @@ mod tests {
         let result = identify(&tron_addr);
 
         // Verify the full pipeline works
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
             // Should include Tron (if detection works)
             if candidates.iter().any(|c| c.chain == "tron") {
@@ -497,9 +486,6 @@ mod tests {
             for i in 1..candidates.len() {
                 assert!(candidates[i - 1].confidence >= candidates[i].confidence);
             }
-        } else {
-            // If it fails, verify error structure
-            assert!(result.is_err());
         }
     }
 
@@ -519,11 +505,8 @@ mod tests {
                     assert!(candidate.confidence >= 0.0 && candidate.confidence <= 1.0);
                     assert!(!candidate.reasoning.is_empty());
                     // Verify encoding is valid
-                    match candidate.encoding {
-                        crate::registry::EncodingType::Hex => {
-                            assert!(candidate.normalized.starts_with("0x"))
-                        }
-                        _ => {}
+                    if candidate.encoding == crate::registry::EncodingType::Hex {
+                        assert!(candidate.normalized.starts_with("0x"));
                     }
                 }
                 // Verify sorting (highest confidence first)
@@ -1765,7 +1748,7 @@ mod tests {
         let matched_chains: Vec<_> = result.iter().map(|c| c.chain.as_str()).collect();
         let matched_evm_count = evm_chains
             .iter()
-            .filter(|&chain| matched_chains.contains(&chain))
+            .filter(|&chain| matched_chains.contains(chain))
             .count();
         assert!(matched_evm_count >= 1); // At least one EVM chain
     }
@@ -1810,7 +1793,7 @@ mod tests {
         let matched_chains: Vec<_> = result.iter().map(|c| c.chain.as_str()).collect();
         let matched_count = secp256k1_chains
             .iter()
-            .filter(|&chain| matched_chains.contains(&chain))
+            .filter(|&chain| matched_chains.contains(chain))
             .count();
         assert!(matched_count >= 1); // At least one secp256k1 chain
     }

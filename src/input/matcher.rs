@@ -148,10 +148,10 @@ fn public_key_matches<'a>(
                     }
                     
                     // Check prefixes
-                    if !pk_fmt.prefixes.is_empty() {
-                        if !pk_fmt.prefixes.iter().any(|p| chars.prefixes.contains(p)) {
-                            return false;
-                        }
+                    if !pk_fmt.prefixes.is_empty()
+                        && !pk_fmt.prefixes.iter().any(|p| chars.prefixes.contains(p))
+                    {
+                        return false;
                     }
                     
                     // Check HRP (for Bech32 public keys)

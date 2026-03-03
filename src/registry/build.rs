@@ -279,7 +279,7 @@ mod tests {
         assert!(matches_address_format(&chars, &metadata));
 
         let input_no_prefix = "742d35Cc6634C0532925a3b844Bc454e4438f44e";
-        let chars_no_prefix = extract_characteristics(input_no_prefix);
+        let _chars_no_prefix = extract_characteristics(input_no_prefix);
         // Should still match if encoding is detected
         // The prefix check might pass if encoding is detected
     }
@@ -365,7 +365,7 @@ mod tests {
         assert!(matches_address_format(&chars, &metadata));
 
         let input_base58 = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
-        let chars_base58 = extract_characteristics(input_base58);
+        let _chars_base58 = extract_characteristics(input_base58);
         // Should not match if encoding doesn't match
         // But if Base58Check is detected, it might still pass other checks
     }
