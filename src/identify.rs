@@ -44,7 +44,8 @@ pub enum InputType {
     Address,
     /// Public key input
     PublicKey,
-    // Future: Transaction, Block, PrivateKey
+    /// Transaction identifier (hash, digest, extrinsic ID)
+    Transaction,
 }
 
 /// Identify the blockchain(s) for a given input string
@@ -79,6 +80,10 @@ pub fn identify(input: &str) -> Result<Vec<IdentificationCandidate>, Error> {
             InputPossibility::PublicKey { key_type } => {
                 // Pipeline-based derivation with validation
                 try_public_key_derivation_for_chain(input, &chars, key_type, &chain_match.chain_id)
+            }
+            InputPossibility::Transaction => {
+                // Transaction identifier detection
+                try_transaction_detection_for_chain(input, &chars, &chain_match.chain_id)
             }
         })
         .collect();
@@ -239,6 +244,136 @@ fn try_public_key_derivation_for_chain(
     }
 }
 
+/// Try transaction detection for a specific chain (after metadata matching)
+///
+/// Performs light structural validation and produces a candidate with:
+/// - Normalized tx identifier (lowercase hex with/without 0x per chain convention)
+/// - Confidence capped appropriately (tx hashes have no checksums to verify)
+/// - Scanner URL built from chain's transaction_scanner_url_template
+fn try_transaction_detection_for_chain(
+    input: &str,
+    chars: &InputCharacteristics,
+    chain_id: &str,
+) -> Vec<IdentificationCandidate> {
+    let registry = Registry::get();
+
+    let chain_metadata = match registry.chains.iter().find(|c| c.id == chain_id) {
+        Some(chain) => chain,
+        None => return Vec::new(),
+    };
+
+    let chain_config = match registry.get_chain_config(chain_id) {
+        Some(config) => config,
+        None => return Vec::new(),
+    };
+
+    let pipeline = chain_config.address_pipeline.as_str();
+
+    // Determine encoding, normalized form, and confidence based on chain family
+    let (encoding, normalized, confidence, reasoning) = match pipeline {
+        "evm" => {
+            // EVM: 0x-prefixed lowercase hex
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.55, // Moderate: correct length+encoding, but no checksum proof
+                format!(
+                    "66-char hex hash with 0x prefix matches {} transaction format (keccak-256)",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "bitcoin_p2pkh" | "bitcoin_bech32" => {
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50, // Lower: 64-char hex is ambiguous across many chains
+                format!(
+                    "64-char hex hash matches {} transaction format (SHA-256d)",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "cosmos" | "cardano" => {
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50,
+                format!(
+                    "64-char hex hash matches {} transaction format",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "tron" => {
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50,
+                format!(
+                    "64-char hex hash matches {} transaction format",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "solana" => {
+            // Solana tx signatures are base58-encoded, preserve original casing
+            (
+                crate::registry::EncodingType::Base58,
+                input.to_string(),
+                0.70, // Higher: 85-90 char base58 is fairly distinctive
+                format!(
+                    "{}-char base58 signature matches {} transaction format (ed25519 signature)",
+                    chars.length, chain_metadata.name
+                ),
+            )
+        }
+        "ss58" => {
+            // Substrate extrinsic IDs are passed through as-is
+            (
+                crate::registry::EncodingType::SS58, // Reuse SS58 as encoding marker for Substrate
+                input.to_string(),
+                0.85, // High: BLOCK_HEIGHT-INDEX pattern is very distinctive
+                format!(
+                    "Extrinsic ID format (block-index) matches {} extrinsic identifier",
+                    chain_metadata.name
+                ),
+            )
+        }
+        _ => return Vec::new(),
+    };
+
+    let scanner_url = generate_transaction_scanner_url(chain_id, &normalized, registry);
+
+    vec![IdentificationCandidate {
+        input_type: InputType::Transaction,
+        chain: chain_id.to_string(),
+        encoding,
+        normalized,
+        confidence,
+        reasoning,
+        scanner_url,
+    }]
+}
+
+/// Generate scanner URL for a chain and transaction identifier
+fn generate_transaction_scanner_url(
+    chain_id: &str,
+    normalized_tx: &str,
+    registry: &Registry,
+) -> Option<String> {
+    registry
+        .chains
+        .iter()
+        .find(|c| c.id == chain_id)
+        .and_then(|chain| chain.transaction_scanner_url_template.as_ref())
+        .map(|template| template.replace("{transaction}", normalized_tx))
+}
+
 /// Get curve name for display
 fn curve_name(key_type: PublicKeyType) -> &'static str {
     match key_type {
@@ -271,8 +406,7 @@ mod tests {
         let result = identify(input);
 
         // Verify the full pipeline works
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
             // Should return multiple EVM chains
             assert!(candidates.iter().any(|c| c.chain == "ethereum"));
@@ -286,9 +420,6 @@ mod tests {
             assert_ne!(candidates[0].normalized, input);
             assert!(candidates[0].normalized.starts_with("0x"));
             assert_eq!(candidates[0].normalized.len(), 42);
-        } else {
-            // If it fails, verify error structure
-            assert!(result.is_err());
         }
     }
 
@@ -299,11 +430,8 @@ mod tests {
         let result = identify(input);
 
         // Verify the full pipeline works
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
-            // Should have multiple EVM chains
-            assert!(candidates.len() >= 1);
             // All should be EVM chains
             let evm_chains = [
                 "ethereum",
@@ -324,9 +452,6 @@ mod tests {
             for i in 1..candidates.len() {
                 assert!(candidates[i - 1].confidence >= candidates[i].confidence);
             }
-        } else {
-            // If it fails, verify error structure
-            assert!(result.is_err());
         }
     }
 
@@ -348,8 +473,7 @@ mod tests {
         let result = identify(&tron_addr);
 
         // Verify the full pipeline works
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
             // Should include Tron (if detection works)
             if candidates.iter().any(|c| c.chain == "tron") {
@@ -362,9 +486,6 @@ mod tests {
             for i in 1..candidates.len() {
                 assert!(candidates[i - 1].confidence >= candidates[i].confidence);
             }
-        } else {
-            // If it fails, verify error structure
-            assert!(result.is_err());
         }
     }
 
@@ -384,11 +505,8 @@ mod tests {
                     assert!(candidate.confidence >= 0.0 && candidate.confidence <= 1.0);
                     assert!(!candidate.reasoning.is_empty());
                     // Verify encoding is valid
-                    match candidate.encoding {
-                        crate::registry::EncodingType::Hex => {
-                            assert!(candidate.normalized.starts_with("0x"))
-                        }
-                        _ => {}
+                    if candidate.encoding == crate::registry::EncodingType::Hex {
+                        assert!(candidate.normalized.starts_with("0x"));
                     }
                 }
                 // Verify sorting (highest confidence first)
@@ -1630,7 +1748,7 @@ mod tests {
         let matched_chains: Vec<_> = result.iter().map(|c| c.chain.as_str()).collect();
         let matched_evm_count = evm_chains
             .iter()
-            .filter(|&chain| matched_chains.contains(&chain))
+            .filter(|&chain| matched_chains.contains(chain))
             .count();
         assert!(matched_evm_count >= 1); // At least one EVM chain
     }
@@ -1675,8 +1793,228 @@ mod tests {
         let matched_chains: Vec<_> = result.iter().map(|c| c.chain.as_str()).collect();
         let matched_count = secp256k1_chains
             .iter()
-            .filter(|&chain| matched_chains.contains(&chain))
+            .filter(|&chain| matched_chains.contains(chain))
             .count();
         assert!(matched_count >= 1); // At least one secp256k1 chain
+    }
+
+    #[test]
+    fn test_solana_base58_should_not_match_cosmos() {
+        // Test that base58 Solana address/key doesn't match Cosmos chains
+        let input = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        let result = identify(input).unwrap();
+
+        // Should only match Solana (address + public key = 2 candidates)
+        let solana_count = result.iter().filter(|c| c.chain == "solana").count();
+        let cosmos_count = result
+            .iter()
+            .filter(|c| {
+                c.chain.starts_with("cosmos")
+                    || c.chain == "osmosis"
+                    || c.chain == "juno"
+                    || c.chain == "akash"
+                    || c.chain == "stargaze"
+                    || c.chain == "secret_network"
+                    || c.chain == "terra"
+                    || c.chain == "kava"
+                    || c.chain == "regen"
+                    || c.chain == "sentinel"
+            })
+            .count();
+
+        println!("Solana candidates: {}", solana_count);
+        println!("Cosmos candidates: {}", cosmos_count);
+        println!("Total candidates: {}", result.len());
+
+        // Should have Solana matches
+        assert!(solana_count > 0, "Should match Solana");
+        // Should NOT have Cosmos matches (base58 input shouldn't match hex-only formats)
+        assert_eq!(
+            cosmos_count, 0,
+            "Base58 input should not match Cosmos chains that require hex encoding"
+        );
+    }
+
+    // ============================================================================
+    // Transaction identification tests
+    // ============================================================================
+
+    #[test]
+    fn test_identify_evm_tx_hash() {
+        // Ethereum tx hash from onchain-examples.md
+        let input = "0xcdf331416ac94df404cfa95b13ecd4b23b2b1de895c945e25ff1b557c597a64e";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
+        assert!(tx_candidates.iter().any(|c| c.chain == "ethereum"));
+        // Verify scanner URL
+        let eth_tx = tx_candidates
+            .iter()
+            .find(|c| c.chain == "ethereum")
+            .unwrap();
+        assert!(eth_tx.scanner_url.is_some());
+        assert!(eth_tx
+            .scanner_url
+            .as_ref()
+            .unwrap()
+            .contains("etherscan.io/tx/"));
+        // Verify normalization (lowercase hex)
+        assert!(eth_tx.normalized.starts_with("0x"));
+        assert_eq!(eth_tx.normalized, eth_tx.normalized.to_lowercase());
+    }
+
+    #[test]
+    fn test_identify_bitcoin_tx_hash() {
+        // Bitcoin genesis coinbase tx from onchain-examples.md
+        let input = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
+        assert!(tx_candidates.iter().any(|c| c.chain == "bitcoin"));
+        let btc_tx = tx_candidates.iter().find(|c| c.chain == "bitcoin").unwrap();
+        assert!(btc_tx.scanner_url.is_some());
+        assert!(btc_tx
+            .scanner_url
+            .as_ref()
+            .unwrap()
+            .contains("blockchain.com"));
+    }
+
+    #[test]
+    fn test_identify_solana_tx_signature() {
+        // Solana tx signature from onchain-examples.md
+        let input = "5wpHU1gGYcgKabL7heGGgiKBx3WJMruHiN34sCjTYwQu4sk9H2uMyZsm1P28RqaJPVELtcVxNmSGieq6V5ZZxpDT";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
+        assert!(tx_candidates.iter().any(|c| c.chain == "solana"));
+        let sol_tx = tx_candidates.iter().find(|c| c.chain == "solana").unwrap();
+        assert!(sol_tx.scanner_url.is_some());
+        assert!(sol_tx
+            .scanner_url
+            .as_ref()
+            .unwrap()
+            .contains("solscan.io/tx/"));
+        // Solana tx signatures preserve original casing
+        assert_eq!(sol_tx.normalized, input);
+    }
+
+    #[test]
+    fn test_identify_substrate_extrinsic() {
+        // Polkadot extrinsic from onchain-examples.md
+        let input = "28815161-0";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
+        // Should match Substrate-family chains
+        assert!(tx_candidates
+            .iter()
+            .any(|c| c.chain == "polkadot" || c.chain == "kusama"));
+        // Verify high confidence for distinctive pattern
+        assert!(tx_candidates[0].confidence >= 0.80);
+    }
+
+    #[test]
+    fn test_identify_tx_does_not_break_address_detection() {
+        // Existing address inputs should still work unchanged
+        let input = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
+        let result = identify(input).unwrap();
+
+        // Should still return address candidates
+        let addr_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Address)
+            .collect();
+        assert!(!addr_candidates.is_empty());
+        assert!(addr_candidates.iter().any(|c| c.chain == "ethereum"));
+        // Should NOT have transaction candidates (42-char hex is not a tx)
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(tx_candidates.is_empty());
+    }
+
+    #[test]
+    fn test_identify_tx_does_not_break_public_key_detection() {
+        // Public key inputs should still work
+        let input = "0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let result = identify(input).unwrap();
+
+        let pk_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::PublicKey)
+            .collect();
+        assert!(!pk_candidates.is_empty());
+    }
+
+    #[test]
+    fn test_identify_raw_hex_tx_ambiguous() {
+        // 64-char hex without 0x matches multiple chains as transaction
+        let input = "3e0ba99f9a254b4dec6ee5cb04f833535dd409eccc26133d8df0cf943ee9b326";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(!tx_candidates.is_empty());
+        // Should match multiple chains (bitcoin, cosmos_hub, etc.)
+        let chains: Vec<_> = tx_candidates.iter().map(|c| c.chain.as_str()).collect();
+        assert!(chains.len() > 1, "64-char hex should match multiple chains");
+    }
+
+    #[test]
+    fn test_identify_tron_tx_hash() {
+        // Tron tx from onchain-examples.md
+        let input = "5156e18743c2ceba71f40640c75a8402066a8c42e570f17eecda2cc1101575f4";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(tx_candidates.iter().any(|c| c.chain == "tron"));
+    }
+
+    #[test]
+    fn test_identify_kusama_extrinsic() {
+        let input = "31206697-0";
+        let result = identify(input).unwrap();
+
+        let tx_candidates: Vec<_> = result
+            .iter()
+            .filter(|c| c.input_type == InputType::Transaction)
+            .collect();
+        assert!(!tx_candidates.is_empty());
+        assert!(tx_candidates.iter().any(|c| c.chain == "kusama"));
     }
 }

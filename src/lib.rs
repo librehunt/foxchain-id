@@ -101,10 +101,9 @@ mod tests {
         // EVM addresses should return multiple chain candidates
         let input = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
         let result = identify(input);
-        assert!(result.is_ok());
         let candidates = result.unwrap();
         // Should have multiple EVM chains
-        assert!(candidates.len() >= 1);
+        assert!(!candidates.is_empty());
         // All should be EVM chains
         let evm_chains = [
             "ethereum",
@@ -187,8 +186,7 @@ mod tests {
 
         let result = identify(&tron_addr);
         // May succeed or fail depending on validation
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             assert!(!candidates.is_empty());
             assert!(candidates.iter().any(|c| c.chain == "tron"));
         }
@@ -206,8 +204,7 @@ mod tests {
 
         let result = identify(&substrate_addr);
         // This may fail if the address doesn't validate, but tests integration
-        if result.is_ok() {
-            let candidates = result.unwrap();
+        if let Ok(candidates) = result {
             // Should have Substrate chain candidates if valid
             assert!(!candidates.is_empty());
         }

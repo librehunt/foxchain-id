@@ -22,6 +22,8 @@ pub enum InputPossibility {
     Address,
     /// Could be a public key
     PublicKey { key_type: DetectedKeyType },
+    /// Could be a transaction identifier (hash, digest, extrinsic ID)
+    Transaction,
 }
 
 /// Detected public key type
@@ -49,10 +51,12 @@ pub fn classify_input(
 ) -> Result<Vec<InputPossibility>, Error> {
     let address_possibilities = could_be_address(input, chars)?;
     let public_key_possibilities = could_be_public_key(input, chars)?;
+    let transaction_possibilities = could_be_transaction(input, chars)?;
 
     let possibilities: Vec<InputPossibility> = address_possibilities
         .into_iter()
         .chain(public_key_possibilities)
+        .chain(transaction_possibilities)
         .collect();
 
     if possibilities.is_empty() {
@@ -153,6 +157,51 @@ fn could_be_public_key(
     };
 
     Ok(possibilities)
+}
+
+/// Check if input could be a transaction identifier based on heuristics
+///
+/// Detects:
+/// - Hex hashes: 64 chars (UTXO/Cosmos) or 66 chars with 0x (EVM) — 32-byte SHA-256/Keccak digests
+/// - Base58 signatures: 85-90 chars (Solana 64-byte ed25519 signatures)
+/// - Substrate extrinsic IDs: BLOCK_HEIGHT-INDEX pattern (e.g. "28815161-0")
+///
+/// Returns Ok with single-element vec if it could be a transaction, Ok with empty vec otherwise.
+fn could_be_transaction(
+    input: &str,
+    chars: &InputCharacteristics,
+) -> Result<Vec<InputPossibility>, Error> {
+    let could_be = chars.encoding.iter().any(|encoding| match encoding {
+        EncodingType::Hex => {
+            // EVM tx hash: 0x + 64 hex chars = 66 chars total (32 bytes)
+            let is_evm_tx = chars.length == 66 && chars.prefixes.iter().any(|p| p == "0x");
+            // UTXO/Cosmos/Cardano/Tron tx hash: 64 hex chars without 0x prefix (32 bytes)
+            let is_raw_hex_tx = chars.length == 64 && !chars.prefixes.iter().any(|p| p == "0x");
+            is_evm_tx || is_raw_hex_tx
+        }
+        EncodingType::Base58 => {
+            // Solana tx signature: 64-byte ed25519 signature ≈ 85-90 chars in base58
+            (85..=90).contains(&chars.length)
+        }
+        _ => false,
+    }) || is_substrate_extrinsic(input);
+
+    Ok(if could_be {
+        vec![InputPossibility::Transaction]
+    } else {
+        vec![]
+    })
+}
+
+/// Check if input matches Substrate extrinsic ID format: BLOCK_HEIGHT-EXTRINSIC_INDEX
+/// Examples: "28815161-0", "31206697-0"
+pub fn is_substrate_extrinsic(input: &str) -> bool {
+    let parts: Vec<&str> = input.split('-').collect();
+    parts.len() == 2
+        && !parts[0].is_empty()
+        && !parts[1].is_empty()
+        && parts[0].chars().all(|c| c.is_ascii_digit())
+        && parts[1].chars().all(|c| c.is_ascii_digit())
 }
 
 #[cfg(test)]
@@ -423,5 +472,115 @@ mod tests {
         let result = classify_input(input, &chars);
 
         assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Transaction classification tests
+    // ============================================================================
+
+    #[test]
+    fn test_classify_evm_tx_hash() {
+        // Ethereum tx hash from onchain-examples.md
+        let input = "0xcdf331416ac94df404cfa95b13ecd4b23b2b1de895c945e25ff1b557c597a64e";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Transaction));
+        // Should NOT be an address (66 chars != 42 chars)
+        assert!(!possibilities.contains(&InputPossibility::Address));
+    }
+
+    #[test]
+    fn test_classify_bitcoin_tx_hash() {
+        // Bitcoin genesis coinbase tx from onchain-examples.md
+        let input = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Transaction));
+    }
+
+    #[test]
+    fn test_classify_solana_tx_signature() {
+        // Solana tx signature from onchain-examples.md (88 chars)
+        let input = "5wpHU1gGYcgKabL7heGGgiKBx3WJMruHiN34sCjTYwQu4sk9H2uMyZsm1P28RqaJPVELtcVxNmSGieq6V5ZZxpDT";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Transaction));
+        // Should NOT be an address (88 chars is outside 32-44 range)
+        assert!(!possibilities.contains(&InputPossibility::Address));
+    }
+
+    #[test]
+    fn test_classify_substrate_extrinsic() {
+        // Polkadot extrinsic from onchain-examples.md
+        let input = "28815161-0";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Transaction));
+        // Should NOT be an address or public key
+        assert!(!possibilities.contains(&InputPossibility::Address));
+        assert!(!possibilities
+            .iter()
+            .any(|p| matches!(p, InputPossibility::PublicKey { .. })));
+    }
+
+    #[test]
+    fn test_classify_evm_address_not_transaction() {
+        // EVM addresses (42 chars) should NOT be classified as transactions
+        let input = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Address));
+        assert!(!possibilities.contains(&InputPossibility::Transaction));
+    }
+
+    #[test]
+    fn test_classify_short_string_not_transaction() {
+        // Short strings should not be classified as transactions
+        let input = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(!possibilities.contains(&InputPossibility::Transaction));
+    }
+
+    #[test]
+    fn test_classify_hex_tx_also_public_key() {
+        // 66-char hex with 0x could be BOTH a transaction AND a public key (32-byte Ed25519)
+        let input = "0x9f7f8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        // Should be both Transaction and PublicKey (ambiguous)
+        assert!(possibilities.contains(&InputPossibility::Transaction));
+        assert!(possibilities.iter().any(|p| matches!(
+            p,
+            InputPossibility::PublicKey {
+                key_type: DetectedKeyType::Ed25519
+            }
+        )));
+    }
+
+    #[test]
+    fn test_classify_substrate_extrinsic_kusama() {
+        let input = "31206697-0";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Transaction));
+    }
+
+    #[test]
+    fn test_classify_tron_tx_hash() {
+        // Tron tx hash from onchain-examples.md (64-char hex, no 0x)
+        let input = "5156e18743c2ceba71f40640c75a8402066a8c42e570f17eecda2cc1101575f4";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+
+        assert!(possibilities.contains(&InputPossibility::Transaction));
     }
 }

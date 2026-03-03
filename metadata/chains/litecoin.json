@@ -2,6 +2,7 @@
   "id": "litecoin",
   "name": "Litecoin",
   "scanner_url_template": "https://blockchair.com/litecoin/address/{address}",
+  "transaction_scanner_url_template": "https://litecoinspace.org/tx/{transaction}",
   "curve": "secp256k1",
   "address_pipeline": "bitcoin_p2pkh",
   "requires_stake_key": false,
@@ -10,7 +11,7 @@
   },
   "public_key_formats": [{
     "encoding": "hex",
-    "length_range": [66, 130],
+    "length_range": [66, 132],
     "prefixes": ["0x"]
   }]
 }

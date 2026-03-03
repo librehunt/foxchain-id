@@ -2,13 +2,14 @@
   "id": "base",
   "name": "Base",
   "scanner_url_template": "https://routescan.io/base/address/{address}",
+  "transaction_scanner_url_template": "https://basescan.org/tx/{transaction}",
   "curve": "secp256k1",
   "address_pipeline": "evm",
   "requires_stake_key": false,
   "address_params": {},
   "public_key_formats": [{
     "encoding": "hex",
-    "length_range": [66, 130],
+    "length_range": [66, 132],
     "prefixes": ["0x"]
   }]
 }

@@ -99,7 +99,7 @@ mod tests {
     fn test_evm_pipeline_invalid_decompressed_format() {
         // Test with a key that has invalid format (wrong prefix for compressed)
         // Use 0x04 prefix which is for uncompressed, but length is 33
-        let mut invalid_key = vec![0x04u8; 33];
+        let invalid_key = vec![0x04u8; 33];
         let params = json!({});
 
         // This should fail at length validation or format check

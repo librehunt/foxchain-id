@@ -46,6 +46,7 @@ fn input_type_to_string(input_type: InputType) -> String {
     match input_type {
         InputType::Address => "address".to_string(),
         InputType::PublicKey => "publicKey".to_string(),
+        InputType::Transaction => "transaction".to_string(),
     }
 }
 
@@ -123,5 +124,6 @@ mod tests {
     fn test_input_type_to_string() {
         assert_eq!(input_type_to_string(InputType::Address), "address");
         assert_eq!(input_type_to_string(InputType::PublicKey), "publicKey");
+        assert_eq!(input_type_to_string(InputType::Transaction), "transaction");
     }
 }

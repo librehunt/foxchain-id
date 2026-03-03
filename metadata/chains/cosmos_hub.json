@@ -2,6 +2,7 @@
   "id": "cosmos_hub",
   "name": "Cosmos Hub",
   "scanner_url_template": "https://www.mintscan.io/cosmos/account/{address}",
+  "transaction_scanner_url_template": "https://www.mintscan.io/cosmos/txs/{transaction}",
   "curve": "ed25519",
   "address_pipeline": "cosmos",
   "requires_stake_key": false,
@@ -10,7 +11,7 @@
   },
   "public_key_formats": [{
     "encoding": "hex",
-    "exact_length": 64,
+    "exact_length": 66,
     "prefixes": ["0x"]
   }]
 }

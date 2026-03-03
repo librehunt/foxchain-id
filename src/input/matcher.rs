@@ -6,8 +6,11 @@
 //! Uses functional programming style with iterator combinators for clean,
 //! idiomatic, and performant matching.
 
-use crate::input::{CategorySignature, DetectedKeyType, InputCharacteristics, InputPossibility};
-use crate::registry::{PublicKeyType, Registry};
+use crate::input::{
+    is_substrate_extrinsic, CategorySignature, DetectedKeyType, InputCharacteristics,
+    InputPossibility,
+};
+use crate::registry::{EncodingType, PublicKeyType, Registry};
 
 /// A match between input and a chain
 #[derive(Debug, Clone)]
@@ -36,10 +39,13 @@ pub fn match_input_with_metadata(
     possibilities: &[InputPossibility],
     registry: &Registry,
 ) -> Vec<ChainMatch> {
-    // Extract address and public key possibilities
+    // Extract address, public key, and transaction possibilities
     let has_address = possibilities
         .iter()
         .any(|p| matches!(p, InputPossibility::Address));
+    let has_transaction = possibilities
+        .iter()
+        .any(|p| matches!(p, InputPossibility::Transaction));
     let pk_types: Vec<DetectedKeyType> = possibilities
         .iter()
         .filter_map(|p| match p {
@@ -53,8 +59,9 @@ pub fn match_input_with_metadata(
         .iter()
         .flat_map(|chain| {
             let addr_matches = address_matches(chain, input, chars, has_address);
-            let pk_matches = public_key_matches(chain, &pk_types);
-            addr_matches.chain(pk_matches)
+            let pk_matches = public_key_matches(chain, input, chars, &pk_types);
+            let tx_matches = transaction_matches(chain, input, chars, has_transaction, registry);
+            addr_matches.chain(pk_matches).chain(tx_matches)
         })
         .collect()
 }
@@ -86,6 +93,8 @@ fn address_matches<'a>(
 /// Generate public key matches for a chain using functional pipeline
 fn public_key_matches<'a>(
     chain: &'a crate::registry::ChainMetadata,
+    _input: &'a str,
+    chars: &'a InputCharacteristics,
     pk_types: &'a [DetectedKeyType],
 ) -> impl Iterator<Item = ChainMatch> + 'a {
     chain
@@ -95,8 +104,75 @@ fn public_key_matches<'a>(
             pk_types
                 .iter()
                 .filter(move |pk| {
+                    // Check curve matches
                     let pk_curve = detected_key_to_curve(pk);
-                    pk_fmt.key_type == pk_curve
+                    if pk_fmt.key_type != pk_curve {
+                        return false;
+                    }
+
+                    // Check encoding type matches (similar to address validation)
+                    // Must match the format's encoding if encoding is detected
+                    // If encoding is not detected, we're more lenient but still check other constraints
+                    if !chars.encoding.is_empty() {
+                        // Encoding is detected - must match format's encoding
+                        if !chars.encoding.contains(&pk_fmt.encoding) {
+                            return false;
+                        }
+                    } else {
+                        // Encoding not detected - be more strict: reject if format requires specific encoding
+                        // This prevents false matches (e.g., base58 input matching hex-only formats)
+                        // Only allow if format is flexible (no specific encoding requirement)
+                        // For now, we'll reject if format specifies hex/bech32 but encoding wasn't detected
+                        match pk_fmt.encoding {
+                            EncodingType::Hex | EncodingType::Bech32 | EncodingType::Bech32m => {
+                                // Format requires specific encoding but input encoding wasn't detected
+                                // This likely means the input doesn't match the format
+                                return false;
+                            }
+                            _ => {
+                                // Base58/Base58Check/SS58 are more lenient
+                            }
+                        }
+                    }
+
+                    // Check length requirements
+                    if let Some(exact) = pk_fmt.exact_length {
+                        if chars.length != exact {
+                            return false;
+                        }
+                    }
+                    if let Some((min, max)) = pk_fmt.length_range {
+                        if chars.length < min || chars.length > max {
+                            return false;
+                        }
+                    }
+
+                    // Check prefixes
+                    if !pk_fmt.prefixes.is_empty()
+                        && !pk_fmt.prefixes.iter().any(|p| chars.prefixes.contains(p))
+                    {
+                        return false;
+                    }
+
+                    // Check HRP (for Bech32 public keys)
+                    if !pk_fmt.hrps.is_empty() {
+                        if let Some(ref hrp) = chars.hrp {
+                            if !pk_fmt.hrps.iter().any(|h| hrp.starts_with(h)) {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+
+                    // Check character set
+                    if let Some(ref char_set) = pk_fmt.char_set {
+                        if chars.char_set != *char_set {
+                            return false;
+                        }
+                    }
+
+                    true
                 })
                 .map(move |pk| ChainMatch {
                     chain_id: chain.id.clone(),
@@ -105,6 +181,84 @@ fn public_key_matches<'a>(
                 })
         })
         .take(1) // Only one match per chain for public keys
+}
+
+/// Generate transaction matches for a chain using chain-family heuristics
+///
+/// Uses the chain's address_pipeline to determine expected tx format:
+/// - EVM chains: 66-char hex with 0x prefix (keccak-256 hash)
+/// - UTXO chains (bitcoin_p2pkh/bitcoin_bech32): 64-char hex without 0x (SHA-256d hash)
+/// - Cosmos chains: 64-char hex without 0x (SHA-256 hash)
+/// - Tron: 64-char hex without 0x
+/// - Solana: 85-90 char base58 (64-byte ed25519 signature)
+/// - Substrate (ss58): block_height-extrinsic_index pattern
+/// - Cardano: 64-char hex without 0x
+///
+/// Only matches chains that have a transaction_scanner_url_template defined.
+fn transaction_matches<'a>(
+    chain: &'a crate::registry::ChainMetadata,
+    input: &'a str,
+    chars: &'a InputCharacteristics,
+    has_transaction: bool,
+    registry: &'a Registry,
+) -> impl Iterator<Item = ChainMatch> + 'a {
+    // Only match if classifier detected Transaction possibility and chain has tx template
+    let should_match = has_transaction && chain.transaction_scanner_url_template.is_some();
+
+    let matches_chain = should_match && {
+        let pipeline = registry
+            .get_chain_config(&chain.id)
+            .map(|c| c.address_pipeline.as_str())
+            .unwrap_or("");
+
+        match pipeline {
+            // EVM chains: 0x + 64 hex chars = 66 total
+            "evm" => {
+                chars.length == 66
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // UTXO chains: 64 hex chars, no 0x prefix
+            "bitcoin_p2pkh" | "bitcoin_bech32" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Cosmos SDK chains: 64 hex chars, no 0x prefix
+            "cosmos" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Tron: 64 hex chars, no 0x prefix
+            "tron" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Cardano: 64 hex chars, no 0x prefix
+            "cardano" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Solana: 85-90 char base58 (64-byte signature)
+            "solana" => {
+                (85..=90).contains(&chars.length) && chars.encoding.contains(&EncodingType::Base58)
+            }
+            // Substrate: extrinsic ID format (BLOCK_HEIGHT-INDEX)
+            "ss58" => is_substrate_extrinsic(input),
+            _ => false,
+        }
+    };
+
+    matches_chain
+        .then(|| ChainMatch {
+            chain_id: chain.id.clone(),
+            chain_name: chain.name.clone(),
+            possibility: InputPossibility::Transaction,
+        })
+        .into_iter()
 }
 
 /// Convert DetectedKeyType to PublicKeyType (curve)
@@ -458,5 +612,98 @@ mod tests {
 
         // Should return no matches
         assert!(matches.is_empty());
+    }
+
+    // ============================================================================
+    // Transaction matching tests
+    // ============================================================================
+
+    #[test]
+    fn test_match_evm_tx_hash() {
+        let input = "0xcdf331416ac94df404cfa95b13ecd4b23b2b1de895c945e25ff1b557c597a64e";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+        let registry = Registry::get();
+
+        let matches = match_input_with_metadata(input, &chars, &possibilities, registry);
+
+        let tx_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| matches!(m.possibility, InputPossibility::Transaction))
+            .collect();
+        assert!(!tx_matches.is_empty());
+        // Should match EVM chains
+        assert!(tx_matches.iter().any(|m| m.chain_id == "ethereum"));
+    }
+
+    #[test]
+    fn test_match_bitcoin_tx_hash() {
+        let input = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+        let registry = Registry::get();
+
+        let matches = match_input_with_metadata(input, &chars, &possibilities, registry);
+
+        let tx_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| matches!(m.possibility, InputPossibility::Transaction))
+            .collect();
+        assert!(!tx_matches.is_empty());
+        assert!(tx_matches.iter().any(|m| m.chain_id == "bitcoin"));
+    }
+
+    #[test]
+    fn test_match_solana_tx_signature() {
+        let input = "5wpHU1gGYcgKabL7heGGgiKBx3WJMruHiN34sCjTYwQu4sk9H2uMyZsm1P28RqaJPVELtcVxNmSGieq6V5ZZxpDT";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+        let registry = Registry::get();
+
+        let matches = match_input_with_metadata(input, &chars, &possibilities, registry);
+
+        let tx_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| matches!(m.possibility, InputPossibility::Transaction))
+            .collect();
+        assert!(!tx_matches.is_empty());
+        assert!(tx_matches.iter().any(|m| m.chain_id == "solana"));
+    }
+
+    #[test]
+    fn test_match_substrate_extrinsic() {
+        let input = "28815161-0";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+        let registry = Registry::get();
+
+        let matches = match_input_with_metadata(input, &chars, &possibilities, registry);
+
+        let tx_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| matches!(m.possibility, InputPossibility::Transaction))
+            .collect();
+        assert!(!tx_matches.is_empty());
+        // Should match Substrate-family chains
+        assert!(tx_matches.iter().any(|m| m.chain_id == "polkadot"
+            || m.chain_id == "kusama"
+            || m.chain_id == "substrate"));
+    }
+
+    #[test]
+    fn test_match_evm_address_no_tx() {
+        // EVM addresses should NOT match as transactions
+        let input = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
+        let chars = extract_characteristics(input);
+        let possibilities = classify_input(input, &chars).unwrap();
+        let registry = Registry::get();
+
+        let matches = match_input_with_metadata(input, &chars, &possibilities, registry);
+
+        let tx_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| matches!(m.possibility, InputPossibility::Transaction))
+            .collect();
+        assert!(tx_matches.is_empty());
     }
 }

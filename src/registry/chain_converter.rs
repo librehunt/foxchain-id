@@ -230,6 +230,7 @@ pub fn convert_chain_config(config: ChainConfig) -> Result<ChainMetadata, String
         id: config.id.clone(),
         name: config.name,
         scanner_url_template: config.scanner_url_template,
+        transaction_scanner_url_template: config.transaction_scanner_url_template,
         address_formats,
         public_key_formats,
     })
