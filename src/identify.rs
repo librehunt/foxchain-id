@@ -1803,30 +1803,36 @@ mod tests {
         // Test that base58 Solana address/key doesn't match Cosmos chains
         let input = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
         let result = identify(input).unwrap();
-        
+
         // Should only match Solana (address + public key = 2 candidates)
         let solana_count = result.iter().filter(|c| c.chain == "solana").count();
-        let cosmos_count = result.iter().filter(|c| {
-            c.chain.starts_with("cosmos") || 
-            c.chain == "osmosis" || 
-            c.chain == "juno" ||
-            c.chain == "akash" ||
-            c.chain == "stargaze" ||
-            c.chain == "secret_network" ||
-            c.chain == "terra" ||
-            c.chain == "kava" ||
-            c.chain == "regen" ||
-            c.chain == "sentinel"
-        }).count();
-        
+        let cosmos_count = result
+            .iter()
+            .filter(|c| {
+                c.chain.starts_with("cosmos")
+                    || c.chain == "osmosis"
+                    || c.chain == "juno"
+                    || c.chain == "akash"
+                    || c.chain == "stargaze"
+                    || c.chain == "secret_network"
+                    || c.chain == "terra"
+                    || c.chain == "kava"
+                    || c.chain == "regen"
+                    || c.chain == "sentinel"
+            })
+            .count();
+
         println!("Solana candidates: {}", solana_count);
         println!("Cosmos candidates: {}", cosmos_count);
         println!("Total candidates: {}", result.len());
-        
+
         // Should have Solana matches
         assert!(solana_count > 0, "Should match Solana");
         // Should NOT have Cosmos matches (base58 input shouldn't match hex-only formats)
-        assert_eq!(cosmos_count, 0, "Base58 input should not match Cosmos chains that require hex encoding");
+        assert_eq!(
+            cosmos_count, 0,
+            "Base58 input should not match Cosmos chains that require hex encoding"
+        );
     }
 
     // ============================================================================
@@ -1843,12 +1849,22 @@ mod tests {
             .iter()
             .filter(|c| c.input_type == InputType::Transaction)
             .collect();
-        assert!(!tx_candidates.is_empty(), "Should have transaction candidates");
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
         assert!(tx_candidates.iter().any(|c| c.chain == "ethereum"));
         // Verify scanner URL
-        let eth_tx = tx_candidates.iter().find(|c| c.chain == "ethereum").unwrap();
+        let eth_tx = tx_candidates
+            .iter()
+            .find(|c| c.chain == "ethereum")
+            .unwrap();
         assert!(eth_tx.scanner_url.is_some());
-        assert!(eth_tx.scanner_url.as_ref().unwrap().contains("etherscan.io/tx/"));
+        assert!(eth_tx
+            .scanner_url
+            .as_ref()
+            .unwrap()
+            .contains("etherscan.io/tx/"));
         // Verify normalization (lowercase hex)
         assert!(eth_tx.normalized.starts_with("0x"));
         assert_eq!(eth_tx.normalized, eth_tx.normalized.to_lowercase());
@@ -1864,11 +1880,18 @@ mod tests {
             .iter()
             .filter(|c| c.input_type == InputType::Transaction)
             .collect();
-        assert!(!tx_candidates.is_empty(), "Should have transaction candidates");
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
         assert!(tx_candidates.iter().any(|c| c.chain == "bitcoin"));
         let btc_tx = tx_candidates.iter().find(|c| c.chain == "bitcoin").unwrap();
         assert!(btc_tx.scanner_url.is_some());
-        assert!(btc_tx.scanner_url.as_ref().unwrap().contains("blockchain.com"));
+        assert!(btc_tx
+            .scanner_url
+            .as_ref()
+            .unwrap()
+            .contains("blockchain.com"));
     }
 
     #[test]
@@ -1881,11 +1904,18 @@ mod tests {
             .iter()
             .filter(|c| c.input_type == InputType::Transaction)
             .collect();
-        assert!(!tx_candidates.is_empty(), "Should have transaction candidates");
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
         assert!(tx_candidates.iter().any(|c| c.chain == "solana"));
         let sol_tx = tx_candidates.iter().find(|c| c.chain == "solana").unwrap();
         assert!(sol_tx.scanner_url.is_some());
-        assert!(sol_tx.scanner_url.as_ref().unwrap().contains("solscan.io/tx/"));
+        assert!(sol_tx
+            .scanner_url
+            .as_ref()
+            .unwrap()
+            .contains("solscan.io/tx/"));
         // Solana tx signatures preserve original casing
         assert_eq!(sol_tx.normalized, input);
     }
@@ -1900,9 +1930,14 @@ mod tests {
             .iter()
             .filter(|c| c.input_type == InputType::Transaction)
             .collect();
-        assert!(!tx_candidates.is_empty(), "Should have transaction candidates");
+        assert!(
+            !tx_candidates.is_empty(),
+            "Should have transaction candidates"
+        );
         // Should match Substrate-family chains
-        assert!(tx_candidates.iter().any(|c| c.chain == "polkadot" || c.chain == "kusama"));
+        assert!(tx_candidates
+            .iter()
+            .any(|c| c.chain == "polkadot" || c.chain == "kusama"));
         // Verify high confidence for distinctive pattern
         assert!(tx_candidates[0].confidence >= 0.80);
     }

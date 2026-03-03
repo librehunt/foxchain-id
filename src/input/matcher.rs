@@ -7,8 +7,8 @@
 //! idiomatic, and performant matching.
 
 use crate::input::{
-    CategorySignature, DetectedKeyType, InputCharacteristics, InputPossibility,
-    is_substrate_extrinsic,
+    is_substrate_extrinsic, CategorySignature, DetectedKeyType, InputCharacteristics,
+    InputPossibility,
 };
 use crate::registry::{EncodingType, PublicKeyType, Registry};
 
@@ -109,7 +109,7 @@ fn public_key_matches<'a>(
                     if pk_fmt.key_type != pk_curve {
                         return false;
                     }
-                    
+
                     // Check encoding type matches (similar to address validation)
                     // Must match the format's encoding if encoding is detected
                     // If encoding is not detected, we're more lenient but still check other constraints
@@ -134,7 +134,7 @@ fn public_key_matches<'a>(
                             }
                         }
                     }
-                    
+
                     // Check length requirements
                     if let Some(exact) = pk_fmt.exact_length {
                         if chars.length != exact {
@@ -146,14 +146,14 @@ fn public_key_matches<'a>(
                             return false;
                         }
                     }
-                    
+
                     // Check prefixes
                     if !pk_fmt.prefixes.is_empty()
                         && !pk_fmt.prefixes.iter().any(|p| chars.prefixes.contains(p))
                     {
                         return false;
                     }
-                    
+
                     // Check HRP (for Bech32 public keys)
                     if !pk_fmt.hrps.is_empty() {
                         if let Some(ref hrp) = chars.hrp {
@@ -164,14 +164,14 @@ fn public_key_matches<'a>(
                             return false;
                         }
                     }
-                    
+
                     // Check character set
                     if let Some(ref char_set) = pk_fmt.char_set {
                         if chars.char_set != *char_set {
                             return false;
                         }
                     }
-                    
+
                     true
                 })
                 .map(move |pk| ChainMatch {
@@ -203,8 +203,7 @@ fn transaction_matches<'a>(
     registry: &'a Registry,
 ) -> impl Iterator<Item = ChainMatch> + 'a {
     // Only match if classifier detected Transaction possibility and chain has tx template
-    let should_match = has_transaction
-        && chain.transaction_scanner_url_template.is_some();
+    let should_match = has_transaction && chain.transaction_scanner_url_template.is_some();
 
     let matches_chain = should_match && {
         let pipeline = registry
@@ -245,8 +244,7 @@ fn transaction_matches<'a>(
             }
             // Solana: 85-90 char base58 (64-byte signature)
             "solana" => {
-                (85..=90).contains(&chars.length)
-                    && chars.encoding.contains(&EncodingType::Base58)
+                (85..=90).contains(&chars.length) && chars.encoding.contains(&EncodingType::Base58)
             }
             // Substrate: extrinsic ID format (BLOCK_HEIGHT-INDEX)
             "ss58" => is_substrate_extrinsic(input),
@@ -687,9 +685,9 @@ mod tests {
             .collect();
         assert!(!tx_matches.is_empty());
         // Should match Substrate-family chains
-        assert!(tx_matches
-            .iter()
-            .any(|m| m.chain_id == "polkadot" || m.chain_id == "kusama" || m.chain_id == "substrate"));
+        assert!(tx_matches.iter().any(|m| m.chain_id == "polkadot"
+            || m.chain_id == "kusama"
+            || m.chain_id == "substrate"));
     }
 
     #[test]
