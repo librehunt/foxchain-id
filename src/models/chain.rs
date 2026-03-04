@@ -10,6 +10,9 @@ pub struct ChainConfig {
     /// Scanner URL template for transactions with {transaction} placeholder (optional)
     #[serde(default)]
     pub transaction_scanner_url_template: Option<String>,
+    /// Scanner URL template for block hashes with {block_hash} placeholder (optional)
+    #[serde(default)]
+    pub block_hash_scanner_url_template: Option<String>,
     pub curve: String,
     pub address_pipeline: String,
     #[serde(default)]
