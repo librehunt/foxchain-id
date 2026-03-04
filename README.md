@@ -15,6 +15,8 @@ Multi-chain blockchain address identification library for Rust.
 - **EIP-55 checksum validation**: Validate and normalize EVM addresses according to EIP-55
 - **Public key detection**: Detect public keys in various formats (hex, base58, bech32)
 - **Address derivation**: Derive addresses from public keys for supported chains
+- **Transaction identification**: Detect transaction hashes, extrinsic IDs, and Solana signatures
+- **Block hash detection**: Detect block hashes as a first-class `InputType::BlockHash` alongside transactions (21 chains with block explorer URLs)
 - **WebAssembly support**: Compile to WASM for use in web browsers and Node.js (see [WASM.md](WASM.md))
 
 ## Quick Start
@@ -95,6 +97,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   - Solana address derivation from Ed25519 public keys
   - Cosmos address derivation from Ed25519 public keys
 
+- **Transaction Identification**
+  - EVM transaction hashes (0x-prefixed keccak-256, 66 chars)
+  - Bitcoin/Cosmos/Cardano/Tron transaction hashes (64 hex chars)
+  - Solana transaction signatures (85-90 chars Base58, ed25519)
+  - Substrate extrinsic IDs (`BLOCK_HEIGHT-INDEX` format)
+
+- **Block Hash Detection** (`InputType::BlockHash`)
+  - First-class type alongside `Transaction` — both returned for ambiguous inputs
+  - EVM block hashes (keccak-256, same format as EVM tx — confidence 0.55)
+  - UTXO/Cosmos/Tron block hashes (SHA-256d, same format as their tx — confidence 0.50)
+  - Solana block hashes (32-44 char Base58, **distinct** from 85-90 char tx signature — confidence 0.75)
+  - Substrate block hashes (64 hex chars)
+  - Block explorer URLs via `block_hash_scanner_url_template` for 21 chains (etherscan, blockchain.com, solscan, subscan, mintscan, tronscan, cardanoscan…)
+  - WASM serialization as `"blockHash"` for JavaScript consumers
+
 ### Planned
 
 - TON, Algorand, Near, and more...
@@ -124,7 +141,7 @@ for candidate in result {
 ### Working with Results
 
 ```rust
-use foxchain_id::identify;
+use foxchain_id::{identify, InputType};
 
 let result = identify("0xd8da6bf26964af9d7eed9e03e53415d37aa96045")?;
 
@@ -136,6 +153,39 @@ if let Some(ethereum) = result.iter().find(|c| c.chain == "ethereum") {
 // Get highest confidence candidate
 let best_match = result.iter()
     .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap());
+```
+
+### Block Hash Detection
+
+Block hashes and transaction hashes share the same format for most chains. `identify()` returns **both** `BlockHash` and `Transaction` candidates for ambiguous inputs:
+
+```rust
+use foxchain_id::{identify, InputType};
+
+// EVM block hash (same format as EVM tx hash — both types returned)
+let result = identify("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")?;
+
+let block_hashes: Vec<_> = result.iter()
+    .filter(|c| c.input_type == InputType::BlockHash)
+    .collect();
+let transactions: Vec<_> = result.iter()
+    .filter(|c| c.input_type == InputType::Transaction)
+    .collect();
+
+// Both are returned — disambiguation requires application-level context
+println!("Block hash candidates: {}", block_hashes.len()); // e.g. 10 EVM chains
+println!("Transaction candidates: {}", transactions.len()); // same 10 EVM chains
+
+// Block explorer URL is populated from block_hash_scanner_url_template
+if let Some(eth) = block_hashes.iter().find(|c| c.chain == "ethereum") {
+    println!("Explorer: {:?}", eth.scanner_url);
+    // → Some("https://etherscan.io/block/0x88e96d...")
+}
+
+// Solana block hash IS distinguishable (32-44 char Base58 vs 85-90 char tx signature)
+let sol_result = identify("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM")?;
+let sol_block = sol_result.iter().find(|c| c.input_type == InputType::BlockHash && c.chain == "solana");
+println!("Solana block hash confidence: {:.2}", sol_block.unwrap().confidence); // 0.75
 ```
 
 ## Documentation

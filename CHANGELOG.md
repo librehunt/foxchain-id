@@ -5,6 +5,15 @@
 [Full Changelog](https://github.com/librehunt/foxchain-id/compare/f9d6d027ed2e0164435e56e6c12f0184422a79c8...HEAD)
 
 ### Added
+- **Block hash detection** (`InputType::BlockHash`) as a first-class input type alongside `Transaction`:
+  - `InputPossibility::BlockHash` and `could_be_block_hash()` in the classifier
+  - `block_hash_matches()` in the metadata matcher, gated on `block_hash_scanner_url_template`
+  - `try_block_hash_detection_for_chain()` and `generate_block_hash_scanner_url()` in the identification pipeline
+  - `block_hash_scanner_url_template` field in `ChainConfig`, `ChainMetadata`, and `chain_converter`
+  - 21 chain JSON files updated with block explorer URLs (etherscan, bscscan, polygonscan, blockchain.com, litecoinspace, blockchair, solscan, mintscan, subscan, tronscan, cardanoscan…)
+  - WASM binding: `InputType::BlockHash` serializes as `"blockHash"` for JavaScript consumers
+  - 17 integration tests in `tests/block_hash_detection.rs`
+  - Note: EVM and UTXO block hashes are format-identical to their tx hashes — both `BlockHash` and `Transaction` candidates are returned. Solana is the only chain with a distinguishable block hash format (32-44 char Base58 vs 85-90 char tx signature, confidence 0.75)
 - **Compressed public key decompression support**: Added `decompress_public_key` function in `shared/crypto/secp256k1.rs` to support decompressing 33-byte compressed secp256k1 public keys to 65-byte uncompressed format
 - **EVM address derivation from compressed keys**: `derive_evm_address` now supports compressed public keys (33 bytes with 0x02/0x03 prefix)
 - **Bitcoin address derivation from compressed keys**: `derive_bitcoin_addresses` now supports compressed public keys (33 bytes with 0x02/0x03 prefix)
