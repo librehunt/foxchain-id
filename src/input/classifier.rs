@@ -24,6 +24,8 @@ pub enum InputPossibility {
     PublicKey { key_type: DetectedKeyType },
     /// Could be a transaction identifier (hash, digest, extrinsic ID)
     Transaction,
+    /// Could be a block hash (32-byte digest identifying a block)
+    BlockHash,
 }
 
 /// Detected public key type
@@ -53,10 +55,13 @@ pub fn classify_input(
     let public_key_possibilities = could_be_public_key(input, chars)?;
     let transaction_possibilities = could_be_transaction(input, chars)?;
 
+    let block_hash_possibilities = could_be_block_hash(input, chars)?;
+
     let possibilities: Vec<InputPossibility> = address_possibilities
         .into_iter()
         .chain(public_key_possibilities)
         .chain(transaction_possibilities)
+        .chain(block_hash_possibilities)
         .collect();
 
     if possibilities.is_empty() {
@@ -188,6 +193,47 @@ fn could_be_transaction(
 
     Ok(if could_be {
         vec![InputPossibility::Transaction]
+    } else {
+        vec![]
+    })
+}
+
+/// Check if input could be a block hash based on heuristics
+///
+/// Detects:
+/// - EVM block hash: 66 chars with 0x prefix (keccak-256, same format as EVM tx hash)
+/// - UTXO/Cosmos/Cardano/Tron/Substrate block hash: 64 hex chars without 0x (SHA-256d)
+/// - Solana block hash: 32-44 chars Base58 (DISTINCT from Solana tx signature at 85-90 chars)
+///
+/// Note: for EVM and most UTXO chains, block hashes are format-identical to transaction
+/// hashes. Both InputPossibility::Transaction and InputPossibility::BlockHash will be
+/// returned for those inputs — disambiguation happens via metadata (scanner URL presence).
+///
+/// Returns Ok with single-element vec if it could be a block hash, Ok with empty vec otherwise.
+fn could_be_block_hash(
+    _input: &str,
+    chars: &InputCharacteristics,
+) -> Result<Vec<InputPossibility>, Error> {
+    let could_be = chars.encoding.iter().any(|encoding| match encoding {
+        EncodingType::Hex => {
+            // EVM block hash: 0x + 64 hex chars = 66 chars total (keccak-256)
+            let is_evm_block_hash =
+                chars.length == 66 && chars.prefixes.iter().any(|p| p == "0x");
+            // UTXO/Cosmos/Cardano/Tron/Substrate block hash: 64 hex chars, no 0x (SHA-256d)
+            let is_raw_hex_block_hash =
+                chars.length == 64 && !chars.prefixes.iter().any(|p| p == "0x");
+            is_evm_block_hash || is_raw_hex_block_hash
+        }
+        EncodingType::Base58 => {
+            // Solana block hash: 32-byte hash in Base58 = 32-44 chars
+            // This is the only case distinguishable from tx hashes by format alone
+            (32..=44).contains(&chars.length)
+        }
+        _ => false,
+    });
+
+    Ok(if could_be {
+        vec![InputPossibility::BlockHash]
     } else {
         vec![]
     })

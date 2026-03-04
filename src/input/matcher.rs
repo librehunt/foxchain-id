@@ -46,6 +46,9 @@ pub fn match_input_with_metadata(
     let has_transaction = possibilities
         .iter()
         .any(|p| matches!(p, InputPossibility::Transaction));
+    let has_block_hash = possibilities
+        .iter()
+        .any(|p| matches!(p, InputPossibility::BlockHash));
     let pk_types: Vec<DetectedKeyType> = possibilities
         .iter()
         .filter_map(|p| match p {
@@ -61,7 +64,8 @@ pub fn match_input_with_metadata(
             let addr_matches = address_matches(chain, input, chars, has_address);
             let pk_matches = public_key_matches(chain, input, chars, &pk_types);
             let tx_matches = transaction_matches(chain, input, chars, has_transaction, registry);
-            addr_matches.chain(pk_matches).chain(tx_matches)
+            let bh_matches = block_hash_matches(chain, input, chars, has_block_hash, registry);
+            addr_matches.chain(pk_matches).chain(tx_matches).chain(bh_matches)
         })
         .collect()
 }
@@ -257,6 +261,87 @@ fn transaction_matches<'a>(
             chain_id: chain.id.clone(),
             chain_name: chain.name.clone(),
             possibility: InputPossibility::Transaction,
+        })
+        .into_iter()
+}
+
+/// Generate block hash matches for a chain using chain-family heuristics
+///
+/// Mirrors transaction_matches() exactly. Uses address_pipeline to dispatch:
+/// - EVM: 66-char hex with 0x prefix (keccak-256, same format as EVM tx hash)
+/// - UTXO (bitcoin_p2pkh/bitcoin_bech32): 64-char hex without 0x (SHA-256d)
+/// - Cosmos/Cardano/Tron: 64-char hex without 0x
+/// - Solana: 32-44 char Base58 — DISTINCTIVE (different from Solana tx: 85-90 chars)
+/// - Substrate (ss58): 64-char hex without 0x
+///
+/// Only matches chains that have a block_hash_scanner_url_template defined.
+fn block_hash_matches<'a>(
+    chain: &'a crate::registry::ChainMetadata,
+    _input: &'a str,
+    chars: &'a InputCharacteristics,
+    has_block_hash: bool,
+    registry: &'a Registry,
+) -> impl Iterator<Item = ChainMatch> + 'a {
+    // Only match if classifier detected BlockHash possibility and chain has block hash template
+    let should_match = has_block_hash && chain.block_hash_scanner_url_template.is_some();
+
+    let matches_chain = should_match && {
+        let pipeline = registry
+            .get_chain_config(&chain.id)
+            .map(|c| c.address_pipeline.as_str())
+            .unwrap_or("");
+
+        match pipeline {
+            // EVM chains: 0x + 64 hex chars = 66 total (keccak-256)
+            "evm" => {
+                chars.length == 66
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // UTXO chains: 64 hex chars, no 0x prefix (SHA-256d)
+            "bitcoin_p2pkh" | "bitcoin_bech32" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Cosmos SDK chains: 64 hex chars, no 0x prefix
+            "cosmos" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Tron: 64 hex chars, no 0x prefix
+            "tron" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Cardano: 64 hex chars, no 0x prefix
+            "cardano" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            // Solana block hash: 32-44 char Base58 (32-byte hash)
+            // DISTINCT from Solana tx signature (85-90 chars Base58)
+            "solana" => {
+                (32..=44).contains(&chars.length) && chars.encoding.contains(&EncodingType::Base58)
+            }
+            // Substrate block hash: 64 hex chars without 0x
+            "ss58" => {
+                chars.length == 64
+                    && chars.encoding.contains(&EncodingType::Hex)
+                    && !chars.prefixes.iter().any(|p| p == "0x")
+            }
+            _ => false,
+        }
+    };
+
+    matches_chain
+        .then(|| ChainMatch {
+            chain_id: chain.id.clone(),
+            chain_name: chain.name.clone(),
+            possibility: InputPossibility::BlockHash,
         })
         .into_iter()
 }

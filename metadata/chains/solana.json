@@ -7,10 +7,15 @@
   "address_pipeline": "solana",
   "requires_stake_key": false,
   "address_params": {},
-  "public_key_formats": [{
-    "encoding": "base58",
-    "length_range": [32, 44],
-    "prefixes": []
-  }]
+  "public_key_formats": [
+    {
+      "encoding": "base58",
+      "length_range": [
+        32,
+        44
+      ],
+      "prefixes": []
+    }
+  ],
+  "block_hash_scanner_url_template": "https://solscan.io/block/{block_hash}"
 }
-

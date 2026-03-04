@@ -9,10 +9,14 @@
   "address_params": {
     "prefix": 2
   },
-  "public_key_formats": [{
-    "encoding": "hex",
-    "exact_length": 66,
-    "prefixes": ["0x"]
-  }]
+  "public_key_formats": [
+    {
+      "encoding": "hex",
+      "exact_length": 66,
+      "prefixes": [
+        "0x"
+      ]
+    }
+  ],
+  "block_hash_scanner_url_template": "https://kusama.subscan.io/block/{block_hash}"
 }
-
