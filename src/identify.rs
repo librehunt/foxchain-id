@@ -448,7 +448,7 @@ fn try_block_hash_detection_for_chain(
             (
                 crate::registry::EncodingType::Base58,
                 input.to_string(), // Preserve Base58 casing
-                0.75, // Higher confidence: format is unambiguous relative to Solana tx
+                0.75,              // Higher confidence: format is unambiguous relative to Solana tx
                 format!(
                     "{}-char Base58 hash matches {} block hash format",
                     chars.length, chain_metadata.name

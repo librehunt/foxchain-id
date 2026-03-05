@@ -65,7 +65,10 @@ pub fn match_input_with_metadata(
             let pk_matches = public_key_matches(chain, input, chars, &pk_types);
             let tx_matches = transaction_matches(chain, input, chars, has_transaction, registry);
             let bh_matches = block_hash_matches(chain, input, chars, has_block_hash, registry);
-            addr_matches.chain(pk_matches).chain(tx_matches).chain(bh_matches)
+            addr_matches
+                .chain(pk_matches)
+                .chain(tx_matches)
+                .chain(bh_matches)
         })
         .collect()
 }

@@ -217,8 +217,7 @@ fn could_be_block_hash(
     let could_be = chars.encoding.iter().any(|encoding| match encoding {
         EncodingType::Hex => {
             // EVM block hash: 0x + 64 hex chars = 66 chars total (keccak-256)
-            let is_evm_block_hash =
-                chars.length == 66 && chars.prefixes.iter().any(|p| p == "0x");
+            let is_evm_block_hash = chars.length == 66 && chars.prefixes.iter().any(|p| p == "0x");
             // UTXO/Cosmos/Cardano/Tron/Substrate block hash: 64 hex chars, no 0x (SHA-256d)
             let is_raw_hex_block_hash =
                 chars.length == 64 && !chars.prefixes.iter().any(|p| p == "0x");

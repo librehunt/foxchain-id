@@ -63,7 +63,9 @@ fn test_evm_block_hash_also_returns_transaction_candidates() {
     let results = identify(input).expect("should identify ambiguous EVM hex");
 
     let has_block_hash = results.iter().any(|c| c.input_type == InputType::BlockHash);
-    let has_transaction = results.iter().any(|c| c.input_type == InputType::Transaction);
+    let has_transaction = results
+        .iter()
+        .any(|c| c.input_type == InputType::Transaction);
 
     assert!(has_block_hash, "Should return BlockHash candidates");
     assert!(
@@ -149,7 +151,9 @@ fn test_bitcoin_block_hash_also_returns_transaction_candidates() {
     let results = identify(input).expect("should identify ambiguous 64-char hex");
 
     let has_block_hash = results.iter().any(|c| c.input_type == InputType::BlockHash);
-    let has_transaction = results.iter().any(|c| c.input_type == InputType::Transaction);
+    let has_transaction = results
+        .iter()
+        .any(|c| c.input_type == InputType::Transaction);
 
     assert!(has_block_hash, "Should return BlockHash candidates");
     assert!(
@@ -208,7 +212,8 @@ fn test_solana_block_hash_higher_confidence_than_transaction() {
 #[test]
 fn test_solana_tx_signature_does_not_return_block_hash() {
     // Solana tx signature (85-90 chars Base58) should NOT return BlockHash candidates
-    let input = "5wpHU1gGYcgKabL7heGGgiKBx3WJMruHiN34sCjTYwQu4sk9H2uMyZsm1P28RqaJPVELtcVxNmSGieq6V5ZZxpDT";
+    let input =
+        "5wpHU1gGYcgKabL7heGGgiKBx3WJMruHiN34sCjTYwQu4sk9H2uMyZsm1P28RqaJPVELtcVxNmSGieq6V5ZZxpDT";
     let results = identify(input).expect("should identify Solana tx signature");
 
     let block_hash_candidates: Vec<_> = results
@@ -223,7 +228,9 @@ fn test_solana_tx_signature_does_not_return_block_hash() {
 
     // Should still return Transaction
     assert!(
-        results.iter().any(|c| c.input_type == InputType::Transaction),
+        results
+            .iter()
+            .any(|c| c.input_type == InputType::Transaction),
         "Should return Transaction candidate for Solana tx signature"
     );
 }
@@ -239,7 +246,9 @@ fn test_non_regression_evm_tx_hash_still_returns_transaction() {
     let results = identify(input).expect("should identify EVM tx hash");
 
     assert!(
-        results.iter().any(|c| c.input_type == InputType::Transaction),
+        results
+            .iter()
+            .any(|c| c.input_type == InputType::Transaction),
         "EVM tx hash should still return Transaction candidates (non-regression)"
     );
     assert!(
@@ -271,9 +280,7 @@ fn test_non_regression_evm_address_no_block_hash() {
     let results = identify(input).expect("should identify EVM address");
 
     assert!(
-        !results
-            .iter()
-            .any(|c| c.input_type == InputType::BlockHash),
+        !results.iter().any(|c| c.input_type == InputType::BlockHash),
         "EVM address (42 chars) should NOT return BlockHash candidates"
     );
     assert!(
@@ -289,13 +296,13 @@ fn test_non_regression_substrate_extrinsic_no_block_hash() {
     let results = identify(input).expect("should identify Substrate extrinsic");
 
     assert!(
-        !results
-            .iter()
-            .any(|c| c.input_type == InputType::BlockHash),
+        !results.iter().any(|c| c.input_type == InputType::BlockHash),
         "Substrate extrinsic ID should NOT return BlockHash candidates"
     );
     assert!(
-        results.iter().any(|c| c.input_type == InputType::Transaction),
+        results
+            .iter()
+            .any(|c| c.input_type == InputType::Transaction),
         "Substrate extrinsic should still return Transaction candidate"
     );
 }
@@ -316,7 +323,15 @@ fn test_evm_block_hash_matches_multiple_chains() {
         .collect();
 
     // Should match multiple EVM chains
-    let expected_evm_chains = ["ethereum", "polygon", "bsc", "avalanche", "arbitrum", "optimism", "base"];
+    let expected_evm_chains = [
+        "ethereum",
+        "polygon",
+        "bsc",
+        "avalanche",
+        "arbitrum",
+        "optimism",
+        "base",
+    ];
     let matched_evm: Vec<_> = expected_evm_chains
         .iter()
         .filter(|&&chain| block_chains.contains(&chain))
@@ -341,9 +356,7 @@ fn test_short_hex_not_block_hash() {
     // Either fails classification or doesn't return BlockHash
     if let Ok(results) = result {
         assert!(
-            !results
-                .iter()
-                .any(|c| c.input_type == InputType::BlockHash),
+            !results.iter().any(|c| c.input_type == InputType::BlockHash),
             "Short hex (32 chars) should NOT return BlockHash candidates"
         );
     }
