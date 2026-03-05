@@ -1,7 +1,19 @@
-//! Foxchain ID: Multi-chain blockchain address identification
+//! Foxchain ID: Multi-chain blockchain input identification
 //!
 //! This crate provides functionality to identify which blockchain(s) an input
-//! string (address, public key, or private key) belongs to.
+//! string belongs to. Supported input types:
+//!
+//! - **Address** — EVM (0x), Bitcoin (P2PKH/P2SH/Bech32), Solana (Base58),
+//!   Tron (T-prefixed Base58Check), Cosmos (Bech32), Substrate (SS58), Cardano (Bech32)
+//! - **Public Key** — secp256k1 (compressed/uncompressed), Ed25519 — with address derivation
+//! - **Transaction** — EVM (0x + 64 hex), UTXO (64 hex), Solana (Base58 signature), Substrate (extrinsic ID)
+//! - **Block Hash** — EVM (0x + 64 hex), UTXO (64 hex), Solana (32–44 char Base58)
+//!
+//! > **Note on ambiguity**: EVM and UTXO block hashes are format-identical to their
+//! > transaction hashes. For these chains, both `InputType::BlockHash` and
+//! > `InputType::Transaction` candidates are returned simultaneously. Solana is the
+//! > only chain where the block hash format (32–44 char Base58) is distinguishable
+//! > from the transaction signature (85–90 char Base58).
 
 mod detectors;
 mod identify;

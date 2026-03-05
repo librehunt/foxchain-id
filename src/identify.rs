@@ -46,6 +46,8 @@ pub enum InputType {
     PublicKey,
     /// Transaction identifier (hash, digest, extrinsic ID)
     Transaction,
+    /// Block hash (32-byte digest identifying a block)
+    BlockHash,
 }
 
 /// Identify the blockchain(s) for a given input string
@@ -84,6 +86,10 @@ pub fn identify(input: &str) -> Result<Vec<IdentificationCandidate>, Error> {
             InputPossibility::Transaction => {
                 // Transaction identifier detection
                 try_transaction_detection_for_chain(input, &chars, &chain_match.chain_id)
+            }
+            InputPossibility::BlockHash => {
+                // Block hash detection
+                try_block_hash_detection_for_chain(input, &chars, &chain_match.chain_id)
             }
         })
         .collect();
@@ -358,6 +364,138 @@ fn try_transaction_detection_for_chain(
         reasoning,
         scanner_url,
     }]
+}
+
+/// Try block hash detection for a specific chain (after metadata matching)
+///
+/// Follows the exact pattern of try_transaction_detection_for_chain().
+/// Produces a candidate with:
+/// - Normalized block hash (lowercase hex with/without 0x per chain convention)
+/// - Confidence capped appropriately (no checksums to verify)
+/// - Scanner URL built from chain's block_hash_scanner_url_template
+fn try_block_hash_detection_for_chain(
+    input: &str,
+    chars: &InputCharacteristics,
+    chain_id: &str,
+) -> Vec<IdentificationCandidate> {
+    let registry = Registry::get();
+
+    let chain_metadata = match registry.chains.iter().find(|c| c.id == chain_id) {
+        Some(chain) => chain,
+        None => return Vec::new(),
+    };
+
+    let chain_config = match registry.get_chain_config(chain_id) {
+        Some(config) => config,
+        None => return Vec::new(),
+    };
+
+    let pipeline = chain_config.address_pipeline.as_str();
+
+    let (encoding, normalized, confidence, reasoning) = match pipeline {
+        "evm" => {
+            // EVM block hash: 0x-prefixed lowercase hex (keccak-256, same format as EVM tx hash)
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.55, // Same as tx hash — ambiguous, both BlockHash and Transaction returned
+                format!(
+                    "66-char hex hash with 0x prefix matches {} block hash format (keccak-256)",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "bitcoin_p2pkh" | "bitcoin_bech32" => {
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50, // Ambiguous: same format as Bitcoin tx hash
+                format!(
+                    "64-char hex hash matches {} block hash format (SHA-256d)",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "cosmos" | "cardano" => {
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50,
+                format!(
+                    "64-char hex hash matches {} block hash format",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "tron" => {
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50,
+                format!(
+                    "64-char hex hash matches {} block hash format",
+                    chain_metadata.name
+                ),
+            )
+        }
+        "solana" => {
+            // Solana block hash: 32-byte hash in Base58 = 32-44 chars
+            // DISTINCTIVE: different from Solana tx signature (85-90 chars Base58)
+            (
+                crate::registry::EncodingType::Base58,
+                input.to_string(), // Preserve Base58 casing
+                0.75,              // Higher confidence: format is unambiguous relative to Solana tx
+                format!(
+                    "{}-char Base58 hash matches {} block hash format",
+                    chars.length, chain_metadata.name
+                ),
+            )
+        }
+        "ss58" => {
+            // Substrate block hashes: 64-char hex without 0x prefix
+            let norm = input.to_lowercase();
+            (
+                crate::registry::EncodingType::Hex,
+                norm,
+                0.50,
+                format!(
+                    "64-char hex hash matches {} block hash format",
+                    chain_metadata.name
+                ),
+            )
+        }
+        _ => return Vec::new(),
+    };
+
+    let scanner_url = generate_block_hash_scanner_url(chain_id, &normalized, registry);
+
+    vec![IdentificationCandidate {
+        input_type: InputType::BlockHash,
+        chain: chain_id.to_string(),
+        encoding,
+        normalized,
+        confidence,
+        reasoning,
+        scanner_url,
+    }]
+}
+
+/// Generate scanner URL for a chain and block hash
+fn generate_block_hash_scanner_url(
+    chain_id: &str,
+    normalized_hash: &str,
+    registry: &Registry,
+) -> Option<String> {
+    registry
+        .chains
+        .iter()
+        .find(|c| c.id == chain_id)
+        .and_then(|chain| chain.block_hash_scanner_url_template.as_ref())
+        .map(|template| template.replace("{block_hash}", normalized_hash))
 }
 
 /// Generate scanner URL for a chain and transaction identifier

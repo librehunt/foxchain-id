@@ -231,6 +231,7 @@ pub fn convert_chain_config(config: ChainConfig) -> Result<ChainMetadata, String
         name: config.name,
         scanner_url_template: config.scanner_url_template,
         transaction_scanner_url_template: config.transaction_scanner_url_template,
+        block_hash_scanner_url_template: config.block_hash_scanner_url_template,
         address_formats,
         public_key_formats,
     })

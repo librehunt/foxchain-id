@@ -47,6 +47,7 @@ fn input_type_to_string(input_type: InputType) -> String {
         InputType::Address => "address".to_string(),
         InputType::PublicKey => "publicKey".to_string(),
         InputType::Transaction => "transaction".to_string(),
+        InputType::BlockHash => "blockHash".to_string(),
     }
 }
 

@@ -7,10 +7,17 @@
   "address_pipeline": "evm",
   "requires_stake_key": false,
   "address_params": {},
-  "public_key_formats": [{
-    "encoding": "hex",
-    "length_range": [66, 132],
-    "prefixes": ["0x"]
-  }]
+  "public_key_formats": [
+    {
+      "encoding": "hex",
+      "length_range": [
+        66,
+        132
+      ],
+      "prefixes": [
+        "0x"
+      ]
+    }
+  ],
+  "block_hash_scanner_url_template": "https://arbiscan.io/block/{block_hash}"
 }
-

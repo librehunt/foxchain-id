@@ -9,10 +9,17 @@
   "address_params": {
     "version_byte": 30
   },
-  "public_key_formats": [{
-    "encoding": "hex",
-    "length_range": [66, 132],
-    "prefixes": ["0x"]
-  }]
+  "public_key_formats": [
+    {
+      "encoding": "hex",
+      "length_range": [
+        66,
+        132
+      ],
+      "prefixes": [
+        "0x"
+      ]
+    }
+  ],
+  "block_hash_scanner_url_template": "https://blockchair.com/dogecoin/block/{block_hash}"
 }
-
